@@ -1,0 +1,15 @@
+---
+title: "Prob4-CP1: Um problema pequeno"
+author: "Hadrizia Santos"
+date: "9 de julho de 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(here)
+library(readr)
+```
+
+```{r cars}
+data <- read.csv(here("/data/github-users-committing-filetypes.csv"))
+```
