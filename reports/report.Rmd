@@ -1,15 +1,187 @@
 ---
-title: "Prob4-CP1: Um problema pequeno"
+title: "Inferência: foco em diferenças entre populações"
 author: "Hadrizia Santos"
 date: "9 de julho de 2018"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+Este relatório tem o objetivo de fazer inferências com foco na diferença entre populações. Neste caso, os dados são sobre as liguagens de programação utilizadas por dia pelos usuários do GitHub. As linguagens escolhidas para análise foram Java e Python.
+
+## Importando bibliotecas
+
+```{r warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
 library(here)
 library(readr)
+library(tidyverse)
+library(resample)
+library(timeDate)
+library(lubridate)
+
+theme_set(theme_bw())
 ```
 
-```{r cars}
-data <- read.csv(here("/data/github-users-committing-filetypes.csv"))
+## Importando e conhecendo os dados
+
+```{r warning=FALSE, message=FALSE}
+data <- read.csv(here::here("/data/github-users-committing-filetypes.csv"))
+data <- data %>% na.omit() %>% glimpse()
+
+data <- data %>% 
+  mutate(date = 
+            ymd(paste(the_year,
+                      the_month,
+                      month_day)),
+         is_weekend = isWeekend(date)
+         ) %>%
+  select(-month_day, -the_month, -the_year)
+
+colnames(data)
 ```
+
+Os dados estão distribuídos nas seguintes colunas:
+
+* `file_extension`: A extensão do arquivo indicando a linguagem de programação usada;
+* `users`: Quantidade de usuários que usaram uma determinada linguagem de programação em um determinado dia;
+* `date`: As datas;
+* `is_weekend`: Se a data é um fim de semana (Sábado ou Domingo).
+
+## Perguntas
+
+### 1. Para cada uma delas, há uma diferença significativa na sua popularidade durante a semana e durante o fim de semana? Essa diferença é grande?
+
+A popularidade será definida como a mediana da quantidade de usuários que usam uma linguagem durante um determinado dia.
+
+#### Linguagem Java
+
+```{r}
+java_data <- data %>% filter(file_extension == 'java')
+
+java_data %>% group_by(is_weekend) %>%
+  ggplot(aes(x = is_weekend, 
+             y = users,
+             fill=is_weekend)) + 
+  geom_boxplot() +
+  ggtitle("Popularidade de Java na semana e no FDS") + 
+  labs(x = "É FDS?", y = 'Quantidade de usuários') +
+  theme(legend.position="none")
+```
+
+**Inferência com duas amostras:**
+
+```{r}
+median.week_day = java_data %>% 
+  filter(!is_weekend) %>% 
+  bootstrap(median(users), 
+            R = 2000) %>% 
+    CI.percentile(probs = c(.025, .975))
+median.week_day
+
+median.weekend = java_data %>% 
+  filter(is_weekend) %>% 
+  bootstrap(median(users), 
+            R = 2000) %>% 
+    CI.percentile(probs = c(.025, .975))
+median.weekend
+
+df = data.frame(rbind(median.week_day, 
+                      median.weekend
+                      ))
+df$medida = c(' Ling. Java em dia de semana', 'Ling. Java em fim de semana')
+
+df %>% 
+  ggplot(aes(x = medida, ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2)
+```
+
+Assim, pode-se dizer que estatisticamente, os programadores programam mais em Java durante a semana.
+
+#### Linguagem Python
+
+```{r}
+python_data <- data %>% filter(file_extension == 'py')
+
+python_data %>% group_by(is_weekend) %>%
+  ggplot(aes(x = is_weekend, 
+             y = users,
+             fill=is_weekend)) + 
+  geom_boxplot() +
+  ggtitle("Popularidade de Python na semana e no FDS") + 
+  labs(x = "É FDS?", y = 'Quantidade de usuários') +
+  theme(legend.position="none")
+```
+
+**Inferência com duas amostras:**
+
+```{r}
+median.week_day = python_data %>% 
+  filter(!is_weekend) %>% 
+  bootstrap(median(users), 
+            R = 2000) %>% 
+    CI.percentile(probs = c(.025, .975))
+median.week_day
+
+median.weekend = python_data %>% 
+  filter(is_weekend) %>% 
+  bootstrap(median(users), 
+            R = 2000) %>% 
+    CI.percentile(probs = c(.025, .975))
+median.weekend
+
+df = data.frame(rbind(median.week_day, 
+                      median.weekend
+                      ))
+df$medida = c(' Ling. Python em dia de semana', 'Ling. Python em fim de semana')
+
+df %>% 
+  ggplot(aes(x = medida, ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2)
+```
+
+Assim, pode-se dizer que estatisticamente, os programadores programam mais em Python durante a semana.
+
+### 2.Existe uma diferença significativa entre a popularidade das duas linguagens nos fins de semana? 
+
+**Diferenças não pareadas**
+
+```{r}
+# Mediana dos grupos separados
+
+b1 = python_data %>% 
+  filter(is_weekend) %>%
+  bootstrap(median(users))
+
+median_python = b1 %>% 
+  CI.percentile(probs = c(.025, .975))
+
+b2 = java_data %>% 
+  filter(is_weekend) %>%
+  bootstrap(median(users))
+
+median_java = b2 %>% 
+  CI.percentile(probs = c(.025, .975))
+
+df.median = data.frame(rbind(median_python, 
+                             median_java))
+df.median$medida = c("Python", "Java")
+
+df.median %>% 
+  ggplot(aes(x = medida, ymin = X2.5., ymax = X97.5.)) + 
+  geom_errorbar(width = .2)
+
+# Agora a diferença das medianas
+b.diff.median = bootstrap2(python_data$users, 
+                          treatment = python_data$is_weekend, 
+                          median)
+
+median.diff = CI.percentile(b.diff.median, probs = c(.05, .95))
+median.diff
+
+data.frame(median.diff) %>% 
+  ggplot(aes(x = "Diferença", ymin = X5., ymax = X95.)) + 
+  geom_errorbar(width = .2) + 
+  geom_hline(yintercept = 0, colour = "darkorange")
+```
+
+No geral, os gráficos acima mostram que, nos finais de semana, os programadores programam mais em Python do que em Java.
